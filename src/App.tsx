@@ -1,6 +1,8 @@
+import { useCallback } from 'react'
 import {
   QueryClient,
   QueryClientProvider,
+  useMutation,
   useQuery,
 } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
@@ -83,11 +85,24 @@ export default function App() {
 // все useEffect, useQuery, blablabla заворачиваем в удобные однострочные хуки
 
 function useRepoData() {
-  const { isPending, error, data, isFetching } = useQuery({
+  const { isPending, isLoading, error, data, isFetching } = useQuery({
     queryKey: ['repoData'],
-    queryFn: async () => await myService.fetchRepoData()
+    queryFn: async () => {
+      // Make it slower to see how it works
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return await myService.fetchRepoData()
+    }
   })
-  return { isPending, error, data, isFetching }
+  return { isPending, isLoading, error, data, isFetching }
+}
+
+function useRepoDataMutation() {
+  return useMutation({
+    mutationFn: async () => {
+      // mutate repoData
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  })
 }
 
 function useCounter() {
@@ -99,10 +114,22 @@ function useCounter() {
 }
 
 function Example() {
-  const { isPending, error, data, isFetching } = useRepoData()
+  const { isPending, isLoading, isFetching, error, data } = useRepoData()
+  const { mutate, isPending: isMutationPending } = useRepoDataMutation()
   const { counter } = useCounter()
+  
+  const handleClick = useCallback(() => {
+    mutate(undefined, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["repoData"] })
+      }
+    })
+  }, [mutate])
 
-  if (isPending || !data) return 'Loading...'
+  if (isPending || !data) return 'Pending...'
+  if (isLoading || !data) return 'Loading...'
+  if (isFetching || !data) return 'Fetching...'
+  if (isMutationPending || !data) return 'Mutating...'
 
   if (error) return 'An error has occurred: ' + error.message
 
@@ -110,11 +137,11 @@ function Example() {
     <div>
       <h1>{data.name}</h1>
       <p>Counter: {counter}</p>
+      <button onClick={handleClick}>Mutate repoData</button>
       <p>{data.description}</p>
       <strong>👀 {data.subscribers_count}</strong>{' '}
       <strong>✨ {data.stargazers_count}</strong>{' '}
       <strong>🍴 {data.forks_count}</strong>
-      <div>{isFetching ? 'Updating...' : ''}</div>
       <ReactQueryDevtools initialIsOpen />
     </div>
   )
